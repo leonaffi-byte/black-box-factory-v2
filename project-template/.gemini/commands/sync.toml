@@ -1,0 +1,2 @@
+description = "Sync project to GitHub"
+prompt = "Git add -A, commit with descriptive message, push. Report what changed."

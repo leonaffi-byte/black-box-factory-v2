@@ -1,0 +1,1 @@
+Show project status: current phase (check artifacts/), git status, last 5 commits, TODOs/FIXMEs, quality gate scores, audit log summary.

@@ -1,0 +1,2 @@
+description = "Add a feature using the factory pipeline"
+prompt = "Requirements analysis, architecture update, parallel implementation+testing (information barrier), cross-provider review, fix cycle, update docs. Auto-commit."

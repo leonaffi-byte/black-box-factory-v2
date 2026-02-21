@@ -1,0 +1,2 @@
+description = "Research using Google Search + Perplexity"
+prompt = "Use Google Search (built-in) first, then Perplexity MCP for deep research. Save to artifacts/reports/ and ~/knowledge-base/research/."

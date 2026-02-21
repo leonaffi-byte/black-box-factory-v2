@@ -1,0 +1,2 @@
+description = "Onboard existing project into factory pipeline"
+prompt = "Analyze codebase, reverse-engineer spec and architecture, run cross-provider review via zen MCP, generate black-box tests, create roadmap in artifacts/reports/onboarding-report.md."

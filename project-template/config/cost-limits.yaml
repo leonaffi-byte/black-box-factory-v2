@@ -1,0 +1,4 @@
+# Monthly cost limits per provider (USD)
+google_api: 50
+openrouter: 100
+perplexity: 20

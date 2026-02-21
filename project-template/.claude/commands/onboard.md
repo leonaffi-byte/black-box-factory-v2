@@ -1,0 +1,1 @@
+Onboard existing project: analyze codebase, reverse-engineer spec and architecture docs, run cross-provider review via zen MCP, generate black-box tests, create roadmap in artifacts/reports/onboarding-report.md.

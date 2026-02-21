@@ -1,0 +1,2 @@
+description = "Cross-provider code review via zen MCP"
+prompt = "Send code to Claude Sonnet 4.6 via zen MCP for code review. Send to O3 via zen MCP for security audit. Save to artifacts/reviews/. Report which models did what."

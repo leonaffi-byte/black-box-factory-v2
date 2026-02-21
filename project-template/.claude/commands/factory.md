@@ -1,0 +1,6 @@
+Run the full Black Box Software Factory pipeline on this project.
+Start from Phase 0 (Complexity Assessment) then Phase 1 through Phase 7.
+Read CLAUDE.md for orchestration rules, model assignments, and quality gates.
+Auto-commit after each phase. Ask for user approval only at clarification rounds.
+You MUST use the zen MCP server for non-Claude model roles — do NOT do everything yourself.
+Maintain the audit log at artifacts/reports/audit-log.md throughout.

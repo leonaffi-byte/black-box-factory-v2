@@ -1,0 +1,2 @@
+description = "Pull latest from GitHub"
+prompt = "Stash if needed, git pull --rebase, pop stash. Report changes."

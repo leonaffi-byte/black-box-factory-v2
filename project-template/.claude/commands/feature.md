@@ -1,0 +1,1 @@
+Add a feature using the factory pipeline: requirements analysis, architecture update, parallel implementation+testing (information barrier), cross-provider review, fix cycle, update docs. Auto-commit.
