@@ -350,6 +350,39 @@ async def subdomain_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await _go_to_requirements_msg(update, context)
 
 
+async def _text_fallback_engines(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Remind user to use buttons during engine selection."""
+    await update.message.reply_text(
+        "Please tap the engine buttons above to toggle them, then press Confirm."
+    )
+    return ST_ENGINE_SELECT
+
+
+async def _text_fallback_project_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Remind user to use buttons during project type selection."""
+    await update.message.reply_text(
+        "Please tap one of the project type buttons above:\n"
+        "Telegram Bot / Web Service / Standalone"
+    )
+    return ST_PROJECT_TYPE
+
+
+async def _text_fallback_deploy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Remind user to use buttons during deploy question."""
+    await update.message.reply_text(
+        "Please tap one of the deployment buttons above."
+    )
+    return ST_DEPLOY_ASK
+
+
+async def _text_fallback_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Remind user to use buttons for final confirmation."""
+    await update.message.reply_text(
+        "Please tap Start Factory or Cancel above."
+    )
+    return ST_CONFIRM
+
+
 async def _go_to_requirements(query, context: ContextTypes.DEFAULT_TYPE):
     """Transition to requirements input from a callback query."""
     await query.edit_message_text(
@@ -1136,15 +1169,18 @@ def build_app() -> Application:
         states={
             ST_ENGINE_SELECT: [
                 CallbackQueryHandler(engine_toggle, pattern=r"^eng:"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, _text_fallback_engines),
             ],
             ST_NAME_INPUT: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, name_input),
             ],
             ST_PROJECT_TYPE: [
                 CallbackQueryHandler(project_type_callback, pattern=r"^ptype:"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, _text_fallback_project_type),
             ],
             ST_DEPLOY_ASK: [
                 CallbackQueryHandler(deploy_callback, pattern=r"^deploy:"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, _text_fallback_deploy),
             ],
             ST_SUBDOMAIN_INPUT: [
                 CallbackQueryHandler(subdomain_callback, pattern=r"^(subdomain:|adminpanel:)"),
@@ -1161,6 +1197,7 @@ def build_app() -> Application:
             ],
             ST_CONFIRM: [
                 CallbackQueryHandler(confirm_callback, pattern=r"^confirm:"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, _text_fallback_confirm),
             ],
         },
         fallbacks=[CommandHandler("cancel", cmd_cancel)],
