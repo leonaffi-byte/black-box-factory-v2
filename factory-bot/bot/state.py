@@ -72,12 +72,20 @@ def save_projects(projects: dict) -> None:
 
 
 def create_project(name: str, engines: list[str], description: str,
-                   requirements: str, created_by: int) -> dict:
+                   requirements: str, created_by: int,
+                   project_type: str = "standalone",
+                   deploy: bool = False,
+                   deploy_server: str = "",
+                   subdomain: str = "") -> dict:
     projects = load_projects()
     project = {
         "engines": engines,
         "description": description,
         "requirements": requirements,
+        "project_type": project_type,
+        "deploy": deploy,
+        "deploy_server": deploy_server,
+        "subdomain": subdomain,
         "status": "created",
         "created_by": created_by,
         "created_at": time.time(),

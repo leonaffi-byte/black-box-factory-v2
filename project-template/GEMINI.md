@@ -78,7 +78,8 @@ At pipeline end: total summary.
 ## Pipeline Phases
 
 ### Phase 0: Complexity Assessment
-Read raw-input.md, count endpoints/entities/integrations, select tier, log to audit.
+Read raw-input.md. Also read artifacts/requirements/deploy-config.md (if present) — it contains project type, deployment targets, subdomain, etc. Use this info throughout the pipeline.
+Count endpoints/entities/integrations, select tier, log to audit.
 
 ### Phase 1: Requirements Analysis
 You (native). Use Google Search (built-in) first, Perplexity MCP if needed.
@@ -114,7 +115,10 @@ Run tests, fix failures (max 5 cycles), fix review issues.
 Auto-commit.
 
 ### Phase 7: Documentation + Deployment + Release
-You (native). Generate: README.md, CHANGELOG.md, DEPLOYMENT.md (Docker + manual + cloud), deploy.sh.
+You (native). Read deploy-config.md and generate deployment artifacts accordingly:
+- If deploy=Yes: Dockerfile, docker-compose.yml, deploy.sh (SSH + Docker + nginx/SSL if subdomain set)
+- Always: DEPLOYMENT.md with full manual instructions
+Generate: README.md, CHANGELOG.md.
 Quality gate >= 97. Merge dev->main, tag, push.
 Auto-commit.
 

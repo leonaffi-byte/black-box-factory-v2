@@ -132,10 +132,11 @@ At pipeline end, add SUMMARY with:
 
 ### Phase 0: Complexity Assessment (runs automatically)
 1. Read raw-input.md
-2. Count: estimated endpoints, DB entities, integrations, real-time needs
-3. Select Tier 1, 2, or 3
-4. Log selection and rationale to audit log
-5. Proceed to Phase 1 with the selected model assignments
+2. Read artifacts/requirements/deploy-config.md (if present) — this contains deployment targets chosen by the user (project type, Docker deploy via SSH, subdomain, etc.)
+3. Count: estimated endpoints, DB entities, integrations, real-time needs
+4. Select Tier 1, 2, or 3
+5. Log selection and rationale to audit log
+6. Proceed to Phase 1 with the selected model assignments
 
 ### Phase 1: Requirements Analysis
 Agent: Gemini 3 Pro or 2.5 Flash (per tier, via zen MCP) + Perplexity for domain research
@@ -232,18 +233,19 @@ Agent: Claude Sonnet 4.6 (Task tool subagent)
 
 1. Generate README.md (overview, features, tech stack, setup, API docs)
 2. Generate CHANGELOG.md
-3. Generate artifacts/docs/DEPLOYMENT.md — COMPLETE step-by-step guide:
-   - Prerequisites (every tool, runtime, version, install commands for Ubuntu/Mac/Windows)
-   - Option 1: Docker deployment (docker-compose up)
-   - Option 2: Manual deployment (step by step for backend + frontend + DB)
-   - Option 3: Cloud/VPS deployment (nginx, SSL via certbot, systemd service files)
-   - Environment variables table (every var, description, example, required?)
-   - Backup and maintenance commands/cron
-   - Troubleshooting section (common errors and fixes)
-4. Generate artifacts/release/deploy.sh (one-command deployment script)
-5. Final quality gate >= 97
-6. Merge dev -> main, tag release, push
-7. UPDATE AUDIT LOG with final summary
+3. Read artifacts/requirements/deploy-config.md and generate deployment artifacts accordingly:
+   - If deploy=Yes: generate `Dockerfile`, `docker-compose.yml`, and `artifacts/release/deploy.sh` that deploys via SSH + Docker to the target server. If a subdomain is configured, include nginx reverse proxy config and certbot SSL provisioning in deploy.sh.
+   - Always generate artifacts/docs/DEPLOYMENT.md — COMPLETE step-by-step guide:
+     - Prerequisites (every tool, runtime, version, install commands for Ubuntu/Mac/Windows)
+     - Option 1: Docker deployment (docker-compose up)
+     - Option 2: Manual deployment (step by step for backend + frontend + DB)
+     - Option 3: Cloud/VPS deployment (nginx, SSL via certbot, systemd service files)
+     - Environment variables table (every var, description, example, required?)
+     - Backup and maintenance commands/cron
+     - Troubleshooting section (common errors and fixes)
+4. Final quality gate >= 97
+5. Merge dev -> main, tag release, push
+6. UPDATE AUDIT LOG with final summary
 
 Auto-commit: "Phase 7: Docs and release v[X.Y.Z]"
 

@@ -61,20 +61,19 @@ def _log_file(project: str, engine: str) -> Path:
 
 # --- Project setup ---
 
-def setup_project(project_name: str, engine: str, requirements: str) -> Path:
-    """Create project directory, copy template, write requirements. Returns project dir."""
+def setup_project(project_name: str, engine: str, requirements: str,
+                  deploy_config: dict | None = None) -> Path:
+    """Create project directory, copy template, write requirements. Returns project dir.
+
+    deploy_config may contain: project_type, deploy, deploy_server, subdomain.
+    """
     proj_dir = _project_dir(project_name, engine)
     proj_dir.mkdir(parents=True, exist_ok=True)
 
     # Create artifacts structure
-    (proj_dir / "artifacts" / "requirements").mkdir(parents=True, exist_ok=True)
-    (proj_dir / "artifacts" / "reports").mkdir(parents=True, exist_ok=True)
-    (proj_dir / "artifacts" / "architecture").mkdir(parents=True, exist_ok=True)
-    (proj_dir / "artifacts" / "code").mkdir(parents=True, exist_ok=True)
-    (proj_dir / "artifacts" / "tests").mkdir(parents=True, exist_ok=True)
-    (proj_dir / "artifacts" / "reviews").mkdir(parents=True, exist_ok=True)
-    (proj_dir / "artifacts" / "docs").mkdir(parents=True, exist_ok=True)
-    (proj_dir / "artifacts" / "release").mkdir(parents=True, exist_ok=True)
+    for subdir in ("requirements", "reports", "architecture", "code",
+                   "tests", "reviews", "docs", "release"):
+        (proj_dir / "artifacts" / subdir).mkdir(parents=True, exist_ok=True)
 
     # Copy engine template
     eng = ENGINES[engine]
@@ -86,6 +85,10 @@ def setup_project(project_name: str, engine: str, requirements: str) -> Path:
     # Write requirements
     raw_input = proj_dir / "artifacts" / "requirements" / "raw-input.md"
     raw_input.write_text(requirements)
+
+    # Write deployment config if provided
+    if deploy_config:
+        _write_deploy_config(proj_dir, deploy_config)
 
     # Init git repo
     subprocess.run(
@@ -102,6 +105,76 @@ def setup_project(project_name: str, engine: str, requirements: str) -> Path:
     )
 
     return proj_dir
+
+
+def _write_deploy_config(proj_dir: Path, dc: dict) -> None:
+    """Write artifacts/requirements/deploy-config.md so the factory knows deployment targets."""
+    ptype = dc.get("project_type", "standalone")
+    deploy = dc.get("deploy", False)
+    server = dc.get("deploy_server", "")
+    subdomain = dc.get("subdomain", "")
+
+    type_labels = {"bot": "Telegram Bot", "web": "Web Service / API", "standalone": "Standalone Software"}
+
+    lines = [
+        "# Deployment Configuration",
+        "",
+        f"**Project type:** {type_labels.get(ptype, ptype)}",
+        f"**Deploy:** {'Yes' if deploy else 'No'}",
+    ]
+
+    if deploy:
+        lines.append(f"**Deploy method:** Docker via SSH")
+        if server:
+            lines.append(f"**Deploy server:** `{server}`")
+        if subdomain:
+            lines.append(f"**URL:** `https://{subdomain}`")
+
+        lines.extend([
+            "",
+            "## Deployment Requirements",
+            "",
+            "The factory MUST generate:",
+            "- `Dockerfile` (multi-stage build)",
+            "- `docker-compose.yml` (with all services: app, DB, reverse proxy if web)",
+            "- `artifacts/release/deploy.sh` that:",
+            f"  1. SSHs into `{server}`" if server else "  1. SSHs into the deploy server",
+            "  2. Pulls/copies the Docker image",
+            "  3. Runs docker-compose up -d",
+        ])
+
+        if subdomain:
+            lines.extend([
+                f"  4. Configures nginx reverse proxy for `{subdomain}`",
+                "  5. Provisions SSL via certbot/Let's Encrypt",
+            ])
+
+        if ptype == "bot":
+            lines.extend([
+                "",
+                "## Bot-specific",
+                "- The bot should run as a long-lived Docker container with restart: always",
+                "- No web port needed unless there's an admin panel",
+            ])
+
+        if ptype == "web":
+            lines.extend([
+                "",
+                "## Web-specific",
+                "- Expose via nginx reverse proxy on port 80/443",
+                f"- Server name: `{subdomain}`" if subdomain else "",
+                "- HTTPS with auto-renewing Let's Encrypt certificate",
+            ])
+    else:
+        lines.extend([
+            "",
+            "## No Deployment",
+            "Generate a DEPLOYMENT.md guide with manual setup instructions only.",
+            "Include Dockerfile for optional containerized usage.",
+        ])
+
+    deploy_md = proj_dir / "artifacts" / "requirements" / "deploy-config.md"
+    deploy_md.write_text("\n".join(line for line in lines if line is not None) + "\n")
 
 
 # --- tmux session management ---

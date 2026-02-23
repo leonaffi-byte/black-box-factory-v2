@@ -28,6 +28,10 @@ Write markers BEFORE and AFTER each phase. Include cost updates after expensive 
 
 ## Pipeline
 
+### Phase 0: Setup
+- Read artifacts/requirements/deploy-config.md (if present) — contains project type, deployment targets, subdomain, etc.
+- Use this info to shape architecture and deployment artifacts.
+
 ### Phase 1: Requirements Analysis
 - Read artifacts/requirements/raw-input.md
 - Analyze and structure requirements
@@ -54,8 +58,10 @@ Write markers BEFORE and AFTER each phase. Include cost updates after expensive 
 - Run tests. Fix failures (max 5 cycles).
 
 ### Phase 6: Documentation and Release
-- Generate README.md, CHANGELOG.md, DEPLOYMENT.md
-- Create deploy.sh script
+- Read deploy-config.md and generate deployment artifacts:
+  - If deploy=Yes: Dockerfile, docker-compose.yml, deploy.sh (SSH + Docker + nginx/SSL if subdomain set)
+  - Always: DEPLOYMENT.md with full manual instructions
+- Generate README.md, CHANGELOG.md
 - Final quality gate >= 97
 - Tag release, push
 

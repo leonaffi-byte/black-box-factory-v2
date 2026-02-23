@@ -31,10 +31,13 @@ log = logging.getLogger(__name__)
 (
     ST_ENGINE_SELECT,
     ST_NAME_INPUT,
+    ST_PROJECT_TYPE,
+    ST_DEPLOY_ASK,
+    ST_SUBDOMAIN_INPUT,
     ST_REQUIREMENTS_INPUT,
     ST_TRANSLATION_REVIEW,
     ST_CONFIRM,
-) = range(5)
+) = range(8)
 
 # Active log monitors: {(project, engine): LogMonitor}
 _monitors: dict[tuple[str, str], factory.LogMonitor] = {}
@@ -170,8 +173,187 @@ async def name_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["project_name"] = name
     context.user_data["voice_segments"] = []
+
+    # Ask project type
     await update.message.reply_text(
-        f"Project: {name}\n\n"
+        f"Project: {name}\n\nWhat type of project is this?",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("Telegram Bot", callback_data="ptype:bot")],
+            [InlineKeyboardButton("Web Service / API", callback_data="ptype:web")],
+            [InlineKeyboardButton("Standalone Software", callback_data="ptype:standalone")],
+        ]),
+    )
+    return ST_PROJECT_TYPE
+
+
+def _project_type_label(ptype: str) -> str:
+    return {"bot": "Telegram Bot", "web": "Web Service / API", "standalone": "Standalone Software"}.get(ptype, ptype)
+
+
+async def project_type_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle project type selection."""
+    query = update.callback_query
+    await query.answer()
+    ptype = query.data.split(":", 1)[1]
+    context.user_data["project_type"] = ptype
+
+    # Web services always need deployment discussion
+    # Bots usually need deployment too
+    # Standalone might not
+    if ptype in ("web", "bot"):
+        # Ask about deployment
+        return await _ask_deploy(query, context)
+    else:
+        # Standalone — ask if they want deployment at all
+        await query.edit_message_text(
+            f"Type: {_project_type_label(ptype)}\n\n"
+            "Does this project need deployment?",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Yes, deploy with Docker", callback_data="deploy:yes")],
+                [InlineKeyboardButton("No deployment needed", callback_data="deploy:no")],
+            ]),
+        )
+        return ST_DEPLOY_ASK
+
+
+async def _ask_deploy(query, context: ContextTypes.DEFAULT_TYPE):
+    """Ask deployment question for bot/web projects."""
+    ptype = context.user_data["project_type"]
+    server = config.DEPLOY_SERVER
+
+    if not server:
+        # No deploy server configured — inform user
+        await query.edit_message_text(
+            f"Type: {_project_type_label(ptype)}\n\n"
+            "No DEPLOY_SERVER configured in .env.\n"
+            "The factory will generate Docker files and a deploy guide, "
+            "but won't auto-deploy.\n\n"
+            "Continue without auto-deploy?",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Continue", callback_data="deploy:no")],
+            ]),
+        )
+        return ST_DEPLOY_ASK
+
+    await query.edit_message_text(
+        f"Type: {_project_type_label(ptype)}\n\n"
+        f"Deploy to {server} via Docker + SSH?",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"Yes, deploy to {server}", callback_data="deploy:yes")],
+            [InlineKeyboardButton("No deployment", callback_data="deploy:no")],
+        ]),
+    )
+    return ST_DEPLOY_ASK
+
+
+async def deploy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle deploy yes/no selection."""
+    query = update.callback_query
+    await query.answer()
+    action = query.data.split(":", 1)[1]
+    ptype = context.user_data["project_type"]
+
+    if action == "no":
+        context.user_data["deploy"] = False
+        context.user_data["subdomain"] = None
+        return await _go_to_requirements(query, context)
+
+    context.user_data["deploy"] = True
+    context.user_data["deploy_server"] = config.DEPLOY_SERVER
+
+    # If web service or bot with web interface — ask subdomain
+    if ptype == "web":
+        return await _ask_subdomain(query, context)
+
+    # For bots: ask if there's an admin panel (web UI)
+    if ptype == "bot":
+        await query.edit_message_text(
+            "Will this bot have a web admin panel?",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Yes", callback_data="adminpanel:yes")],
+                [InlineKeyboardButton("No", callback_data="adminpanel:no")],
+            ]),
+        )
+        return ST_SUBDOMAIN_INPUT
+
+    # Standalone with deploy — no subdomain needed
+    context.user_data["subdomain"] = None
+    return await _go_to_requirements(query, context)
+
+
+async def _ask_subdomain(query, context: ContextTypes.DEFAULT_TYPE):
+    """Ask for subdomain selection."""
+    domain = config.DEPLOY_DOMAIN
+    name = context.user_data["project_name"]
+
+    if not domain:
+        await query.edit_message_text(
+            "No DEPLOY_DOMAIN configured in .env.\n"
+            "Skipping subdomain setup.\n\nContinuing...",
+        )
+        context.user_data["subdomain"] = None
+        return await _go_to_requirements(query, context)
+
+    # Suggest project name as subdomain
+    suggested = name.replace("-", "")
+    await query.edit_message_text(
+        f"Choose a subdomain on {domain}:\n\n"
+        f"Suggested: {suggested}.{domain}\n\n"
+        f"Send a subdomain name, or tap the suggestion:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"{suggested}.{domain}", callback_data=f"subdomain:{suggested}")],
+            [InlineKeyboardButton(f"{name}.{domain}", callback_data=f"subdomain:{name}")],
+        ]),
+    )
+    return ST_SUBDOMAIN_INPUT
+
+
+async def subdomain_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle subdomain selection via button or admin panel question."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    # Handle admin panel question for bots
+    if data.startswith("adminpanel:"):
+        action = data.split(":", 1)[1]
+        if action == "yes":
+            return await _ask_subdomain(query, context)
+        else:
+            context.user_data["subdomain"] = None
+            return await _go_to_requirements(query, context)
+
+    # Handle subdomain selection
+    subdomain = data.split(":", 1)[1]
+    domain = config.DEPLOY_DOMAIN
+    context.user_data["subdomain"] = f"{subdomain}.{domain}"
+    return await _go_to_requirements(query, context)
+
+
+async def subdomain_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle custom subdomain typed by user."""
+    import re
+    subdomain = update.message.text.strip().lower()
+
+    # Strip domain suffix if user typed the full thing
+    domain = config.DEPLOY_DOMAIN
+    if domain and subdomain.endswith(f".{domain}"):
+        subdomain = subdomain[: -(len(domain) + 1)]
+
+    if not re.match(r"^[a-z][a-z0-9-]*[a-z0-9]$", subdomain) or len(subdomain) < 2:
+        await update.message.reply_text(
+            "Invalid subdomain. Use lowercase letters, numbers, hyphens. Try again:"
+        )
+        return ST_SUBDOMAIN_INPUT
+
+    context.user_data["subdomain"] = f"{subdomain}.{domain}"
+    return await _go_to_requirements_msg(update, context)
+
+
+async def _go_to_requirements(query, context: ContextTypes.DEFAULT_TYPE):
+    """Transition to requirements input from a callback query."""
+    await query.edit_message_text(
+        _deployment_summary(context) + "\n\n"
         "Now describe your requirements.\n"
         "Send voice messages (Hebrew/English) or text.\n"
         "Press Done when finished.",
@@ -181,6 +363,40 @@ async def name_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]]),
     )
     return ST_REQUIREMENTS_INPUT
+
+
+async def _go_to_requirements_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Transition to requirements input from a text message."""
+    await update.message.reply_text(
+        _deployment_summary(context) + "\n\n"
+        "Now describe your requirements.\n"
+        "Send voice messages (Hebrew/English) or text.\n"
+        "Press Done when finished.",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("Done", callback_data="req:done"),
+            InlineKeyboardButton("Clear All", callback_data="req:clear"),
+        ]]),
+    )
+    return ST_REQUIREMENTS_INPUT
+
+
+def _deployment_summary(context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Build a summary string of deployment choices so far."""
+    ud = context.user_data
+    name = ud.get("project_name", "?")
+    ptype = _project_type_label(ud.get("project_type", "?"))
+    deploy = ud.get("deploy", False)
+    subdomain = ud.get("subdomain")
+
+    lines = [f"Project: {name}", f"Type: {ptype}"]
+    if deploy:
+        server = ud.get("deploy_server", config.DEPLOY_SERVER)
+        lines.append(f"Deploy: Docker -> {server}")
+        if subdomain:
+            lines.append(f"URL: {subdomain}")
+    else:
+        lines.append("Deploy: no")
+    return "\n".join(lines)
 
 
 async def requirements_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -319,8 +535,9 @@ async def translation_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         name = context.user_data["project_name"]
 
+        deploy_info = _deployment_summary(context)
         await query.edit_message_text(
-            f"Project: {name}\n"
+            f"{deploy_info}\n"
             f"Engines: {engines}\n\n"
             f"Requirements (English):\n{english_text}\n\n"
             "Confirm to start the factory?",
@@ -372,10 +589,10 @@ async def translation_text_edit(update: Update, context: ContextTypes.DEFAULT_TY
         factory.ENGINES[e]["name"]
         for e in context.user_data["selected_engines"]
     )
-    name = context.user_data["project_name"]
+    deploy_info = _deployment_summary(context)
 
     await update.message.reply_text(
-        f"Project: {name}\n"
+        f"{deploy_info}\n"
         f"Engines: {engines}\n\n"
         f"Requirements (English):\n{corrected}\n\n"
         "Confirm to start the factory?",
@@ -409,11 +626,22 @@ async def confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         description=requirements[:200],
         requirements=requirements,
         created_by=user_id,
+        project_type=context.user_data.get("project_type", "standalone"),
+        deploy=context.user_data.get("deploy", False),
+        deploy_server=context.user_data.get("deploy_server", ""),
+        subdomain=context.user_data.get("subdomain", "") or "",
     )
+
+    deploy_config = {
+        "project_type": context.user_data.get("project_type", "standalone"),
+        "deploy": context.user_data.get("deploy", False),
+        "deploy_server": context.user_data.get("deploy_server", ""),
+        "subdomain": context.user_data.get("subdomain", "") or "",
+    }
 
     started = []
     for engine in engines:
-        factory.setup_project(name, engine, requirements)
+        factory.setup_project(name, engine, requirements, deploy_config=deploy_config)
         session = factory.start_engine(name, engine)
 
         # Start log monitor
@@ -531,7 +759,13 @@ async def cmd_factory(update: Update, context: ContextTypes.DEFAULT_TYPE):
         requirements = proj.get("requirements", proj.get("description", ""))
         proj_dir = factory._project_dir(name, engine)
         if not proj_dir.exists():
-            factory.setup_project(name, engine, requirements)
+            deploy_config = {
+                "project_type": proj.get("project_type", "standalone"),
+                "deploy": proj.get("deploy", False),
+                "deploy_server": proj.get("deploy_server", ""),
+                "subdomain": proj.get("subdomain", ""),
+            }
+            factory.setup_project(name, engine, requirements, deploy_config=deploy_config)
         session = factory.start_engine(name, engine)
         monitor = factory.LogMonitor(
             name, engine,
@@ -905,6 +1139,16 @@ def build_app() -> Application:
             ],
             ST_NAME_INPUT: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, name_input),
+            ],
+            ST_PROJECT_TYPE: [
+                CallbackQueryHandler(project_type_callback, pattern=r"^ptype:"),
+            ],
+            ST_DEPLOY_ASK: [
+                CallbackQueryHandler(deploy_callback, pattern=r"^deploy:"),
+            ],
+            ST_SUBDOMAIN_INPUT: [
+                CallbackQueryHandler(subdomain_callback, pattern=r"^(subdomain:|adminpanel:)"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, subdomain_text),
             ],
             ST_REQUIREMENTS_INPUT: [
                 MessageHandler(filters.VOICE, requirements_voice),

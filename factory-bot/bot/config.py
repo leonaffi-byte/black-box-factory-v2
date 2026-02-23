@@ -19,6 +19,10 @@ GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 
+# Deployment
+DEPLOY_SERVER = os.environ.get("DEPLOY_SERVER", "")        # e.g. "root@100.64.0.5"
+DEPLOY_DOMAIN = os.environ.get("DEPLOY_DOMAIN", "")        # e.g. "example.com"
+
 # Paths
 FACTORY_ROOT = Path(os.environ.get("FACTORY_ROOT", "/home/factory/projects"))
 STATE_DIR = Path(os.environ.get("STATE_DIR", str(Path.home() / ".factory-bot")))
