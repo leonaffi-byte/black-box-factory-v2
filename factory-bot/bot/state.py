@@ -14,7 +14,7 @@ _SETTINGS_FILE = config.STATE_DIR / "settings.json"
 DEFAULT_SETTINGS = {
     "stt_provider": "auto",       # "groq", "openai", "auto"
     "tts_provider": "edge",       # "edge", "openai"
-    "tts_voice": "he-IL-HilaNeural",  # edge-tts voice name
+    "tts_voice": "en-US-AriaNeural",  # edge-tts voice name (English — all responses are in English)
     "default_engines": ["claude"],
     "notification_events": ["phase_end", "error", "complete"],
     "quality_threshold": 97,

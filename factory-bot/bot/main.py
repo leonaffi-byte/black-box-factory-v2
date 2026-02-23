@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
     ST_ENGINE_SELECT,
     ST_NAME_INPUT,
     ST_REQUIREMENTS_INPUT,
-    ST_REQUIREMENTS_REVIEW,
+    ST_TRANSLATION_REVIEW,
     ST_CONFIRM,
 ) = range(5)
 
@@ -280,9 +280,39 @@ async def requirements_callback(update: Update, context: ContextTypes.DEFAULT_TY
             )
             return ST_REQUIREMENTS_INPUT
 
-        full_text = "\n\n".join(segments)
-        context.user_data["requirements_text"] = full_text
+        full_hebrew = "\n\n".join(segments)
+        context.user_data["hebrew_text"] = full_hebrew
 
+        await query.edit_message_text("Translating to English...")
+
+        # Translate Hebrew → English
+        english_text = await voice.translate_to_english(full_hebrew)
+        context.user_data["requirements_text"] = english_text
+
+        await query.edit_message_text(
+            f"Hebrew input:\n{full_hebrew[:500]}\n\n"
+            f"English translation:\n{english_text}\n\n"
+            "Is the English translation correct?",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("Approve", callback_data="trans:approve"),
+                InlineKeyboardButton("Re-translate", callback_data="trans:retry"),
+                InlineKeyboardButton("Edit", callback_data="trans:edit"),
+            ]]),
+        )
+        return ST_TRANSLATION_REVIEW
+
+    return ST_REQUIREMENTS_INPUT
+
+
+async def translation_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle translation review buttons."""
+    query = update.callback_query
+    await query.answer()
+    action = query.data.split(":", 1)[1]
+
+    if action == "approve":
+        # English translation approved — proceed to confirmation
+        english_text = context.user_data["requirements_text"]
         engines = ", ".join(
             factory.ENGINES[e]["name"]
             for e in context.user_data["selected_engines"]
@@ -292,7 +322,7 @@ async def requirements_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text(
             f"Project: {name}\n"
             f"Engines: {engines}\n\n"
-            f"Requirements:\n{full_text}\n\n"
+            f"Requirements (English):\n{english_text}\n\n"
             "Confirm to start the factory?",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("Start Factory", callback_data="confirm:yes"),
@@ -301,7 +331,60 @@ async def requirements_callback(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return ST_CONFIRM
 
-    return ST_REQUIREMENTS_INPUT
+    if action == "retry":
+        # Re-translate with fresh API call
+        hebrew_text = context.user_data.get("hebrew_text", "")
+        await query.edit_message_text("Re-translating...")
+
+        english_text = await voice.translate_to_english(hebrew_text)
+        context.user_data["requirements_text"] = english_text
+
+        await query.edit_message_text(
+            f"New translation:\n{english_text}\n\n"
+            "Is this correct?",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("Approve", callback_data="trans:approve"),
+                InlineKeyboardButton("Re-translate", callback_data="trans:retry"),
+                InlineKeyboardButton("Edit", callback_data="trans:edit"),
+            ]]),
+        )
+        return ST_TRANSLATION_REVIEW
+
+    if action == "edit":
+        await query.edit_message_text(
+            "Send the corrected English text:"
+        )
+        return ST_TRANSLATION_REVIEW
+
+    return ST_TRANSLATION_REVIEW
+
+
+async def translation_text_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle manual English text correction during translation review."""
+    corrected = update.message.text.strip()
+    if not corrected:
+        await update.message.reply_text("Please send the corrected English text:")
+        return ST_TRANSLATION_REVIEW
+
+    context.user_data["requirements_text"] = corrected
+
+    engines = ", ".join(
+        factory.ENGINES[e]["name"]
+        for e in context.user_data["selected_engines"]
+    )
+    name = context.user_data["project_name"]
+
+    await update.message.reply_text(
+        f"Project: {name}\n"
+        f"Engines: {engines}\n\n"
+        f"Requirements (English):\n{corrected}\n\n"
+        "Confirm to start the factory?",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("Start Factory", callback_data="confirm:yes"),
+            InlineKeyboardButton("Cancel", callback_data="confirm:no"),
+        ]]),
+    )
+    return ST_CONFIRM
 
 
 async def confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -610,7 +693,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     options = {
         "stt_provider": ["auto", "groq", "openai"],
         "tts_provider": ["edge", "openai"],
-        "tts_voice": ["he-IL-HilaNeural", "he-IL-AvriNeural", "en-US-AriaNeural"],
+        "tts_voice": ["en-US-AriaNeural", "en-US-GuyNeural", "en-GB-SoniaNeural"],
         "default_engines": ["claude", "gemini", "opencode", "aider"],
     }
 
@@ -753,7 +836,8 @@ async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ─── Voice handler (outside conversation — for general voice chat) ───────────
 
 async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle voice messages outside of the project wizard."""
+    """Handle voice messages outside of the project wizard.
+    Transcribes Hebrew, translates to English, sends both back."""
     if not await _authorized(update, context):
         return
 
@@ -767,16 +851,21 @@ async def voice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         wav_path = voice.ogg_to_wav(ogg_path)
-        text = await voice.transcribe(wav_path)
+        hebrew_text = await voice.transcribe(wav_path)
     finally:
         Path(ogg_path).unlink(missing_ok=True)
         Path(ogg_path.rsplit(".", 1)[0] + ".wav").unlink(missing_ok=True)
 
-    # Send transcription as text
-    await update.message.reply_text(f"Transcription:\n{text}")
+    # Translate to English
+    english_text = await voice.translate_to_english(hebrew_text)
 
-    # Also send as voice reply (TTS)
-    ogg_response = await voice.text_to_speech(text)
+    # Send both Hebrew transcription and English translation
+    await update.message.reply_text(
+        f"Hebrew: {hebrew_text}\n\nEnglish: {english_text}"
+    )
+
+    # Send English text as voice (TTS)
+    ogg_response = await voice.text_to_speech(english_text)
     if ogg_response:
         try:
             await update.message.reply_voice(voice=open(ogg_response, "rb"))
@@ -821,6 +910,10 @@ def build_app() -> Application:
                 MessageHandler(filters.VOICE, requirements_voice),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, requirements_text),
                 CallbackQueryHandler(requirements_callback, pattern=r"^req:"),
+            ],
+            ST_TRANSLATION_REVIEW: [
+                CallbackQueryHandler(translation_callback, pattern=r"^trans:"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, translation_text_edit),
             ],
             ST_CONFIRM: [
                 CallbackQueryHandler(confirm_callback, pattern=r"^confirm:"),

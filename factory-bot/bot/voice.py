@@ -97,12 +97,93 @@ async def transcribe(audio_path: str) -> str:
     return "[Transcription failed - all providers unavailable]"
 
 
+# --- Translation: Hebrew → English ---
+
+_TRANSLATE_PROMPT = (
+    "Translate the following Hebrew text to English. "
+    "Output ONLY the English translation, nothing else. "
+    "Keep technical terms, project names, and proper nouns as-is."
+)
+
+
+async def _translate_groq(hebrew_text: str) -> str | None:
+    """Translate Hebrew to English using Groq LLM (free tier)."""
+    if not config.GROQ_API_KEY:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {config.GROQ_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [
+                        {"role": "system", "content": _TRANSLATE_PROMPT},
+                        {"role": "user", "content": hebrew_text},
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 4096,
+                },
+            )
+            if resp.status_code == 200:
+                return resp.json()["choices"][0]["message"]["content"].strip()
+            log.warning("Groq translate failed: %d %s", resp.status_code, resp.text[:200])
+    except Exception as e:
+        log.warning("Groq translate error: %s", e)
+    return None
+
+
+async def _translate_openai(hebrew_text: str) -> str | None:
+    """Translate Hebrew to English using OpenAI (gpt-4o-mini)."""
+    if not config.OPENAI_API_KEY:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {config.OPENAI_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [
+                        {"role": "system", "content": _TRANSLATE_PROMPT},
+                        {"role": "user", "content": hebrew_text},
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 4096,
+                },
+            )
+            if resp.status_code == 200:
+                return resp.json()["choices"][0]["message"]["content"].strip()
+            log.warning("OpenAI translate failed: %d %s", resp.status_code, resp.text[:200])
+    except Exception as e:
+        log.warning("OpenAI translate error: %s", e)
+    return None
+
+
+async def translate_to_english(hebrew_text: str) -> str:
+    """Translate Hebrew text to English. Uses Groq LLM (free) with OpenAI fallback."""
+    result = await _translate_groq(hebrew_text)
+    if result:
+        return result
+    log.info("Groq translation failed, falling back to OpenAI")
+    result = await _translate_openai(hebrew_text)
+    if result:
+        return result
+    return "[Translation failed - all providers unavailable]"
+
+
 # --- TTS: Text-to-Speech ---
 
 async def tts_edge(text: str, voice: str | None = None) -> str | None:
     """Generate speech using edge-tts (Microsoft, free). Returns ogg path or None."""
     settings = state.load_settings()
-    voice = voice or settings.get("tts_voice", "he-IL-HilaNeural")
+    voice = voice or settings.get("tts_voice", "en-US-AriaNeural")
 
     try:
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
