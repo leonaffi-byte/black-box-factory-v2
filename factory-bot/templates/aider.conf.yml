@@ -1,0 +1,10 @@
+# Aider configuration for Black Box Software Factory v2
+# See: https://aider.chat/docs/config/aider_conf.html
+
+yes-always: true
+auto-commits: true
+dark-mode: true
+
+# Model configuration (override via env or CLI args)
+# model: openrouter/qwen/qwen3-coder-480b-a35b
+# api-key: openrouter=$OPENROUTER_API_KEY

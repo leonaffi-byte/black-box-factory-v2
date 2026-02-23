@@ -24,3 +24,9 @@ export GITHUB_TOKEN="PASTE-YOUR-KEY-HERE"
 
 # Your GitHub username
 export GITHUB_USER="leonaffi-byte"
+
+# Deployment: SSH target for Docker deployment (e.g. root@100.64.0.5 via Tailscale)
+export DEPLOY_SERVER=""
+
+# Deployment: Main domain for subdomain routing (e.g. example.com)
+export DEPLOY_DOMAIN=""

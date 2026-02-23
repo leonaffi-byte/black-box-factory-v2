@@ -1,0 +1,17 @@
+[Unit]
+Description=Factory Control Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=factory
+Group=factory
+WorkingDirectory=/opt/factory-bot
+ExecStart=/opt/factory-bot/.venv/bin/python -m bot.main
+Restart=on-failure
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/opt/factory-bot/.env
+
+[Install]
+WantedBy=multi-user.target
