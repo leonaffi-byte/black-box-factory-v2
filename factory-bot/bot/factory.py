@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
-from typing import Callable
+from typing import Awaitable, Callable
 
 from . import config, state
 
@@ -305,7 +305,7 @@ class LogMonitor:
     """Async monitor that tails a factory log file and fires callbacks on markers."""
 
     def __init__(self, project_name: str, engine: str,
-                 on_event: Callable[[dict], asyncio.coroutine]):
+                 on_event: Callable[[dict], Awaitable]):
         self.project_name = project_name
         self.engine = engine
         self.on_event = on_event
