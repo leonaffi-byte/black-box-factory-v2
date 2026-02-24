@@ -273,15 +273,18 @@ su - $FACTORY_USER -c 'mkdir -p ~/.npm-global && npm config set prefix "~/.npm-g
 pass "npm global prefix set"
 
 # ═══════════════════════════════════════════════════════════
-# [11] CLAUDE CODE + GEMINI CLI
+# [11] CLAUDE CODE + GEMINI CLI + PI
 # ═══════════════════════════════════════════════════════════
 echo ""
-echo "━━━ [11/17] AI CLIs ━━━"
+echo ""
 command -v claude &>/dev/null || npm install -g @anthropic-ai/claude-code 2>/dev/null
 pass "Claude Code $(claude --version 2>/dev/null | head -1 || echo 'installed')"
 
 command -v gemini &>/dev/null || npm install -g @google/gemini-cli 2>/dev/null
 pass "Gemini CLI installed"
+
+command -v pi >/dev/null 2>&1 || npm install -g @mariozechner/pi-coding-agent 2>/dev/null
+pass "Pi coding agent installed"
 
 # ═══════════════════════════════════════════════════════════
 # [12] MCP SERVERS
