@@ -1311,14 +1311,14 @@ async def auth_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         _PMETA = {
             "anthropic": {
                 "label": "Anthropic  (claude.ai)",  "icon": "🟠",
-                "step2": "2️⃣ Approve on *claude.ai* — you'll see a code",
-                "code_label": "auth code",
-                "hint_re": r"state=([^&\s]{10,20})",
+                "step2": "21️⃣ Log in at *claude.ai* → browser redirects to console.anthropic.com",
+                "code_label": "full redirect URL  (or just code#state from URL bar)",
+                "hint_re": None,
             },
             "google": {
                 "label": "Google / Gemini",  "icon": "🔵",
-                "step2": "2️⃣ Sign in with your *Google account*",
-                "code_label": "authorization code",
+                "step2": "22️⃣ Sign in → browser tries localhost:8085 (will fail)",
+                "code_label": "full redirect URL from address bar (http://localhost:8085/...)",
                 "hint_re": None,
             },
             "openai": {
@@ -1335,7 +1335,7 @@ async def auth_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
 
         if provider == "anthropic":
-            ok, result = await auth_engines.claude_start_oauth()
+            ok, result = await auth_engines.anthropic_start_oauth()
         elif provider == "google":
             ok, result = await auth_engines.gemini_start_oauth()
         elif provider == "openai":
@@ -1424,9 +1424,7 @@ async def auth_oauth_code_input(update: Update, context: ContextTypes.DEFAULT_TY
     uid = update.effective_user.id
     code = update.message.text.strip()
 
-    # Strip fragment (#...) if user accidentally includes state
-    if '#' in code:
-        code = code.split('#')[0].strip()
+    # Pass full text to deliver functions (they handle code#state and full URLs)
 
     eng = context.user_data.get("auth_engine", "")
     label = _ENGINE_LABELS.get(eng, eng)
@@ -1441,7 +1439,7 @@ async def auth_oauth_code_input(update: Update, context: ContextTypes.DEFAULT_TY
                     else "anthropic")
 
     if provider == "anthropic":
-        ok, msg = await auth_engines.claude_deliver_code(code)
+        ok, msg = await auth_engines.anthropic_deliver_code(code, eng)
         if ok:
             note = await auth_engines.after_anthropic_oauth(eng)
             if note:
